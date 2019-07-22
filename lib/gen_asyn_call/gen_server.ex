@@ -36,11 +36,11 @@ defmodule GenAsyncCall.GenServer do
           0 ->
             case error do
               {:nodedown, node} ->
-                exit({{:nodedown, node}, {__MODULE__, :handle_async_error, [error, tag, state]}})
+                exit({{:nodedown, node}, {__MODULE__, :handle_async_reply, [error, tag, state]}})
               {:down, reason} ->
-                exit({reason, {__MODULE__, :handle_async_error, [error, tag, state]}})
+                exit({reason, {__MODULE__, :handle_async_reply, [error, tag, state]}})
               :timeout ->
-                exit({:timeout, {__MODULE__, :handle_async_error, [error, tag, state]}})
+                exit({:timeout, {__MODULE__, :handle_async_reply, [error, tag, state]}})
             end
 
           1 ->
