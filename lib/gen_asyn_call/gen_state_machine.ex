@@ -1,7 +1,7 @@
 defmodule GenAsyncCall.GenStateMachine do
   @callback handle_async_reply({:ok, reply :: any} | {:error, reason :: term}, tag :: term, state :: term, data :: term) :: :gen_statem.event_handler_result(GenStateMachine.state)
 
-  @callback interposer(reply :: any, GenAsyncCall.call_refs, state :: term, data :: term) :: any
+  @callback gen_async_interposer(reply :: any, GenAsyncCall.call_refs, state :: term, data :: term) :: any
 
   @callback push_refs(state :: term, data :: term, GenAsyncCall.call_refs) :: {new_state :: term, new_data ::term}
 
@@ -44,16 +44,16 @@ defmodule GenAsyncCall.GenStateMachine do
         end
       end
 
-      def interposer(reply, {_mref, _tref, fref_or_tag}, state, data) when is_function(fref_or_tag) do
+      def gen_async_interposer(reply, {_mref, _tref, fref_or_tag}, state, data) when is_function(fref_or_tag) do
         fref_or_tag.(reply, state, data)
       end
 
-      def interposer(reply, {_mref, _tref, fref_or_tag}, state, data) when GenAsyncCall.is_mod_fun_arg(fref_or_tag) do
+      def gen_async_interposer(reply, {_mref, _tref, fref_or_tag}, state, data) when GenAsyncCall.is_mod_fun_arg(fref_or_tag) do
         {mod, fname, args} = fref_or_tag
         apply(mod, fname, [reply, state, data | args])
       end
 
-      def interposer(reply, {mref, _tref, fref_or_tag}, state, data) do
+      def gen_async_interposer(reply, {mref, _tref, fref_or_tag}, state, data) do
         case fref_or_tag do
           nil ->
             handle_async_reply(reply, mref, state, data)
@@ -74,7 +74,7 @@ defmodule GenAsyncCall.GenStateMachine do
         {refs, state, data}
       end
 
-      defoverridable handle_async_reply: 4, interposer: 4, push_refs: 3, pop_refs: 3
+      defoverridable handle_async_reply: 4, gen_async_interposer: 4, push_refs: 3, pop_refs: 3
 
       def handle_event(:info, {mref, reply}, state, data) when is_reference(mref) do
         case pop_refs(state, data, mref) do
@@ -85,7 +85,7 @@ defmodule GenAsyncCall.GenStateMachine do
             GenAsyncCall.cancel_timer(refs)
             Process.demonitor(mref, [:flush])
 
-            interposer({:ok, reply}, refs, state, data)
+            gen_async_interposer({:ok, reply}, refs, state, data)
         end
       end
 
@@ -98,7 +98,7 @@ defmodule GenAsyncCall.GenStateMachine do
             GenAsyncCall.cancel_timer(refs)
             node = GenAsyncCall.get_node(process)
 
-            interposer({:error, {:nodedown, node}}, refs, state, data)
+            gen_async_interposer({:error, {:nodedown, node}}, refs, state, data)
         end
       end
 
@@ -110,7 +110,7 @@ defmodule GenAsyncCall.GenStateMachine do
           {refs, state, data} ->
             GenAsyncCall.cancel_timer(refs)
 
-            interposer({:error, {:down, reason}}, refs, state, data)
+            gen_async_interposer({:error, {:down, reason}}, refs, state, data)
         end
       end
 
@@ -122,7 +122,7 @@ defmodule GenAsyncCall.GenStateMachine do
           {refs, state, data} ->
             Process.demonitor(mref, [:flush])
 
-            interposer({:error, :timeout}, refs, state, data)
+            gen_async_interposer({:error, :timeout}, refs, state, data)
         end
       end
 
