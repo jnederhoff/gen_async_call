@@ -3,5 +3,4 @@ language: elixir
 elixir: '1.9.1'
 otp_release:
   - '22.0.7'
-  - '21.3.8.5'
-  - '20.3.8.22'
+  - '21.3.8'
