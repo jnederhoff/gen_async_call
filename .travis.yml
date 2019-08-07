@@ -8,3 +8,7 @@ elixir:
 otp_release:
   - '22.0.7'
   - '21.3.8'
+matrix:
+  exclude:
+    - elixir: '1.6.6'
+      otp_release: '22.0.7'
