@@ -5,7 +5,7 @@ defmodule GenAsyncCall.MixProject do
     [
       app: :gen_async_call,
       version: "0.1.0",
-      elixir: "~> 1.9",
+      elixir: ">= 1.6.6",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       test_pattern: "*.exs"
