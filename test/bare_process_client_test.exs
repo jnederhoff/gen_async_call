@@ -1,5 +1,6 @@
 defmodule BareProcessClientTest do
   use ExUnit.Case
+  import GenAsyncCall, only: [call_refs: 1, mfa: 1]
 
   setup _context do
     {:ok, server_pid} = start_supervised(Supervisor.child_spec(TestServer, restart: :temporary))
@@ -9,7 +10,7 @@ defmodule BareProcessClientTest do
 
   describe "callback tests:" do
     test "happy path call and reply", context do
-      {mref, _tref, _fref} = TestServer.async_sleep(context.server, 10)
+      call_refs(mref: mref) = TestServer.async_sleep(context.server, 10)
 
       assert_receive {^mref, :slept}
     end
@@ -18,7 +19,7 @@ defmodule BareProcessClientTest do
       server_pid = context.server
 
       Process.exit(server_pid, :kill)
-      {mref, _tref, _fref} = TestServer.async_sleep(server_pid, 10)
+      call_refs(mref: mref) = TestServer.async_sleep(server_pid, 10)
 
       assert_receive {:DOWN, ^mref, _, ^server_pid, :noproc}
     end
@@ -26,7 +27,7 @@ defmodule BareProcessClientTest do
     test "server exits ok, client notified", context do
       server_pid = context.server
 
-      {mref, _tref, _fref} = TestServer.async_sleep(server_pid, 10, exit_after: 2)
+      call_refs(mref: mref) = TestServer.async_sleep(server_pid, 10, exit_after: 2)
 
       assert_receive {:DOWN, ^mref, _, ^server_pid, :normal}
     end
@@ -34,13 +35,13 @@ defmodule BareProcessClientTest do
     test "server dies, client notified", context do
       server_pid = context.server
 
-      {mref, _tref, _fref} = TestServer.async_sleep(server_pid, 10, crash_after: 2)
+      call_refs(mref: mref) = TestServer.async_sleep(server_pid, 10, crash_after: 2)
 
       assert_receive {:DOWN, ^mref, _, ^server_pid, :killed}
     end
 
     test "call timeout", context do
-      {mref, _tref, _fref} = TestServer.async_sleep(context.server, 100, timeout: 10)
+      call_refs(mref: mref) = TestServer.async_sleep(context.server, 100, timeout: 10)
 
       assert_receive {:async_call_timeout, ^mref}
     end
@@ -101,19 +102,19 @@ defmodule BareProcessClientTest do
 
   describe "await mfa tests:" do
     test "happy path call and reply", context do
-      refs = TestServer.async_sleep(context.server, 10, [], {TestMFA, :my_func, [:arg2]})
+      refs = TestServer.async_sleep(context.server, 10, [], mfa(module: TestMFA, function: :my_func, arguments: [:arg2]))
 
       assert {:my_func, {:ok, :slept}} = GenAsyncCall.await(refs)
     end
 
     test "server dies, client notified", context do
-      refs = TestServer.async_sleep(context.server, 10, [crash_after: 2], {TestMFA, :my_func, [:arg2]})
+      refs = TestServer.async_sleep(context.server, 10, [crash_after: 2], mfa(module: TestMFA, function: :my_func, arguments: [:arg2]))
 
       assert {:my_func, {:error, {:down, :killed}}} = GenAsyncCall.await(refs)
     end
 
     test "call timeout", context do
-      refs = TestServer.async_sleep(context.server, 100, [timeout: 10], {TestMFA, :my_func, [:arg2]})
+      refs = TestServer.async_sleep(context.server, 100, [timeout: 10], mfa(module: TestMFA, function: :my_func, arguments: [:arg2]))
 
       assert {:my_func, {:error, :timeout}} = GenAsyncCall.await(refs)
     end
@@ -174,19 +175,19 @@ defmodule BareProcessClientTest do
 
   describe "await! mfa tests:" do
     test "happy path call and reply", context do
-      refs = TestServer.async_sleep(context.server, 10, [], {TestMFA, :my_func, [:arg2]})
+      refs = TestServer.async_sleep(context.server, 10, [], mfa(module: TestMFA, function: :my_func, arguments: [:arg2]))
 
       assert {:my_func, :slept} = GenAsyncCall.await!(refs)
     end
 
     test "server dies, client notified", context do
-      refs = TestServer.async_sleep(context.server, 10, [crash_after: 2], {TestMFA, :my_func, [:arg2]})
+      refs = TestServer.async_sleep(context.server, 10, [crash_after: 2], mfa(module: TestMFA, function: :my_func, arguments: [:arg2]))
 
       assert {:killed, _} = catch_exit(GenAsyncCall.await!(refs))
     end
 
     test "call timeout", context do
-      refs = TestServer.async_sleep(context.server, 100, [timeout: 10], {TestMFA, :my_func, [:arg2]})
+      refs = TestServer.async_sleep(context.server, 100, [timeout: 10], mfa(module: TestMFA, function: :my_func, arguments: [:arg2]))
 
       assert {:timeout, _} = catch_exit(GenAsyncCall.await!(refs))
     end

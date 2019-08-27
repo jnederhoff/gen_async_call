@@ -3,6 +3,21 @@ defmodule GenAsyncCall do
   Documentation for GenAsyncCall.
   """
 
+  import Record, only: [defrecord: 3, is_record: 2]
+
+  defrecord(:mfa, :gen_async_call_mfa, module: nil, function: nil, arguments: nil)
+  defrecord(:call_refs, :gen_async_call_refs, mref: nil, tref: nil, fref_or_tag: nil)
+
+  @typedoc """
+  A record containing a Module atom, a function atom, and a list of arguments
+  """
+  @type mod_fun_arg :: record(:mfa, module: atom, function: atom, arguments: list)
+
+  @typedoc """
+  A record containing references to the monitor, timeout, and callback associated with a call.
+  """
+  @type call_refs :: record(:call_refs, mref: reference, tref: reference | :infinity, fref_or_tag: function | mod_fun_arg | term)
+
   @typedoc "The GenServer name"
   @type name :: atom | {:global, any} | {:via, module, any}
 
@@ -26,20 +41,6 @@ defmodule GenAsyncCall do
   A message indicating that an async call has replied successfully
   """
   @type async_call_reply :: {reference, reply :: any}
-
-  @typedoc """
-  A tuple containing references to the monitor and timeout associated with a call.
-  """
-  @type call_refs ::
-          {monitor_ref :: reference, timer_ref :: reference | :infinity,
-           function_ref :: function | mfa | nil}
-
-  @typedoc """
-  A tuple containing a Module atom, a function atom, and a list of arguments
-  """
-  @type mod_fun_arg :: {module, function :: atom, arguments :: list}
-
-  defguard is_mod_fun_arg(fref_or_tag) when is_tuple(fref_or_tag) and tuple_size(fref_or_tag) == 3 and is_atom(elem(fref_or_tag, 0)) and is_atom(elem(fref_or_tag, 1)) and is_list(elem(fref_or_tag,2))
 
   defguard is_timeout(timeout) when (is_integer(timeout) and timeout >= 0) or timeout == :infinity
 
@@ -96,22 +97,26 @@ defmodule GenAsyncCall do
 
         Process.send(pid, {:"$gen_call", {self(), mref}, request}, [])
 
-        {mref, tref, fref_or_tag}
+        call_refs(mref: mref, tref: tref, fref_or_tag: fref_or_tag)
     end
   end
 
   @spec await(call_refs) :: any
-  def await({mref, tref, fref_or_tag}) when is_function(fref_or_tag) do
+  def await(call_refs(fref_or_tag: fref_or_tag) = refs) when is_function(fref_or_tag) do
     # strip fref_or_tag since this function is specially handling it
-    do_await({mref, tref, nil})
+    call_refs(refs, fref_or_tag: nil)
+    |> do_await()
     |> fref_or_tag.()
   end
 
-  def await({mref, tref, fref_or_tag}) when is_mod_fun_arg(fref_or_tag) do
-    {mod, fname, args} = fref_or_tag
+  def await(call_refs(fref_or_tag: fref_or_tag) = refs) when is_record(fref_or_tag, :gen_async_call_mfa) do
+    mfa(module: mod, function: fname, arguments: args) = fref_or_tag
 
     # strip fref_or_tag since this function is specially handling it
-    apply(mod, fname, [do_await({mref, tref, nil}) | args])
+    reply = call_refs(refs, fref_or_tag: nil)
+    |> do_await()
+
+    apply(mod, fname, [reply | args])
   end
 
   def await(refs) do
@@ -120,7 +125,7 @@ defmodule GenAsyncCall do
 
   @spec do_await(call_refs) ::
           {:ok, reply :: any} | {:ok, reply :: any, tag :: term} | {:error, :timeout | {:down, reason :: any} | {:nodedown, node}}
-  defp do_await({mref, _tref, fref_or_tag} = refs) do
+  defp do_await(call_refs(mref: mref, fref_or_tag: fref_or_tag) = refs) do
     receive do
       {^mref, reply} ->
         cancel_timer(refs)
@@ -147,17 +152,21 @@ defmodule GenAsyncCall do
     end
   end
 
-  def await!({mref, tref, fref_or_tag}) when is_function(fref_or_tag) do
+  def await!(call_refs(fref_or_tag: fref_or_tag) = refs) when is_function(fref_or_tag) do
     # strip fref_or_tag since this function is specially handling it
-    do_await!({mref, tref, nil})
+    call_refs(refs, fref_or_tag: nil)
+    |> do_await!()
     |> fref_or_tag.()
   end
 
-  def await!({mref, tref, fref_or_tag}) when is_mod_fun_arg(fref_or_tag) do
-    {mod, fname, args} = fref_or_tag
+  def await!(call_refs(fref_or_tag: fref_or_tag) = refs) when is_record(fref_or_tag, :gen_async_call_mfa) do
+    mfa(module: mod, function: fname, arguments: args) = fref_or_tag
 
     # strip fref_or_tag since this function is specially handling it
-    apply(mod, fname, [do_await!({mref, tref, nil}) | args])
+    reply = call_refs(refs, fref_or_tag: nil)
+    |> do_await!()
+
+    apply(mod, fname, [reply | args])
   end
 
   def await!(refs) do
@@ -206,7 +215,7 @@ defmodule GenAsyncCall do
   end
 
   @spec cancel_timer(call_refs) :: :ok
-  def cancel_timer({mref, tref, _fref_or_tag}) do
+  def cancel_timer(call_refs(mref: mref, tref: tref)) do
     case tref do
       :infinity ->
         :ok
@@ -226,7 +235,7 @@ defmodule GenAsyncCall do
     end
   end
 
-  def push_refs({mref, _, _} = refs) do
+  def push_refs(call_refs(mref: mref) = refs) do
     refs_map =
       Process.get(:async_call_refs, %{})
       |> Map.put(mref, refs)

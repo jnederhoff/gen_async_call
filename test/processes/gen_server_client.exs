@@ -1,6 +1,7 @@
 defmodule GenServerClient do
   use GenServer
   use GenAsyncCall.GenServer
+  import GenAsyncCall, only: [mfa: 1]
   require Logger
 
   def test_async_sleep(pid, time, opts \\ []) do
@@ -41,7 +42,7 @@ defmodule GenServerClient do
   end
 
   def handle_call({:test_async_sleep_mfa, time, opts}, from, state) do
-    refs = TestServer.async_sleep(state.server, time, opts, {__MODULE__, :my_mfa, [from]})
+    refs = TestServer.async_sleep(state.server, time, opts, mfa(module: __MODULE__, function: :my_mfa, arguments: [from]))
 
     state =
       state

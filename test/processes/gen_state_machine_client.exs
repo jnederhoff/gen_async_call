@@ -1,6 +1,7 @@
 defmodule GenStateMachineClient do
   use GenStateMachine
   use GenAsyncCall.GenStateMachine
+  import GenAsyncCall, only: [mfa: 1]
   require Logger
 
   def test_async_sleep(pid, time, opts \\ []) do
@@ -37,7 +38,7 @@ defmodule GenStateMachineClient do
   end
 
   def handle_event({:call, from}, {:test_async_sleep_mfa, time, opts}, state, data) do
-    refs = TestServer.async_sleep(data.server, time, opts, {__MODULE__, :my_mfa, [from]})
+    refs = TestServer.async_sleep(data.server, time, opts, mfa(module: __MODULE__, function: :my_mfa, arguments: [from]))
 
     {_state, data} = push_refs(state, data, refs)
 

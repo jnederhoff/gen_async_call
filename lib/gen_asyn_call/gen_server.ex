@@ -1,4 +1,7 @@
 defmodule GenAsyncCall.GenServer do
+  import Record, only: [is_record: 2]
+  import GenAsyncCall, only: [call_refs: 1, mfa: 1]
+
   @callback handle_async_reply({:ok, reply :: any} | {:error, reason :: term}, tag :: term, state :: term) ::
   {:noreply, new_state}
   | {:noreply, new_state, timeout | :hibernate | {:continue, term}}
@@ -48,16 +51,16 @@ defmodule GenAsyncCall.GenServer do
         end
       end
 
-      def gen_async_interposer(reply, {_mref, _tref, fref_or_tag}, state) when is_function(fref_or_tag) do
+      def gen_async_interposer(reply, call_refs(fref_or_tag: fref_or_tag), state) when is_function(fref_or_tag) do
         fref_or_tag.(reply, state)
       end
 
-      def gen_async_interposer(reply, {_mref, _tref, fref_or_tag}, state) when GenAsyncCall.is_mod_fun_arg(fref_or_tag) do
-        {mod, fname, args} = fref_or_tag
+      def gen_async_interposer(reply, call_refs(fref_or_tag: fref_or_tag), state) when is_record(fref_or_tag, :gen_async_call_mfa) do
+        mfa(module: mod, function: fname, arguments: args) = fref_or_tag
         apply(mod, fname, [reply, state | args])
       end
 
-      def gen_async_interposer(reply, {mref, _tref, fref_or_tag}, state) do
+      def gen_async_interposer(reply, call_refs(mref: mref, fref_or_tag: fref_or_tag), state) do
         case fref_or_tag do
           nil ->
             handle_async_reply(reply, mref, state)
